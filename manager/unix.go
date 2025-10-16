@@ -5,6 +5,7 @@ package manager
 import (
 	"os/exec"
 	"syscall"
+	"time"
 )
 
 // createCommand creates a Unix-specific command
@@ -22,22 +23,33 @@ func (pm *ProcessManager) killProcessPlatform(cmd *exec.Cmd) error {
 		return nil
 	}
 
-	// Use process group to kill all child processes
-	// Negative PID means kill the process group
-	err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	// First try SIGTERM for graceful shutdown
+	err := syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 	if err != nil {
-		// 如果进程已经不存在，忽略错误
+		// If process doesn't exist, that's fine
 		if err == syscall.ESRCH {
 			return nil
 		}
-		return err
 	}
+
+	// Wait a bit for graceful shutdown
+	time.Sleep(100 * time.Millisecond)
+
+	// Check if process is still running
+	if pm.isProcessRunning(cmd.Process.Pid) {
+		// Force kill with SIGKILL
+		err = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		if err != nil && err != syscall.ESRCH {
+			return err
+		}
+	}
+
 	return nil
 }
 
 // isProcessRunning 检查进程是否仍在运行
 func (pm *ProcessManager) isProcessRunning(pid int) bool {
-	// 向进程发送信号0来检查是否存在
+	// Send signal 0 to check if process exists
 	err := syscall.Kill(pid, 0)
 	return err == nil
 }

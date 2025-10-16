@@ -1,0 +1,25 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Go files
+/bin/
+/dist/
+
+# Dependency directories
+vendor/
+
+# Test coverage files
+coverage.txt
+profile.out

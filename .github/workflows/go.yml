@@ -1,0 +1,34 @@
+name: Go
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        go: ['1.19', '1.20']
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: ${{ matrix.go }}
+
+    - name: Build
+      run: go build -v ./...
+
+    - name: Test
+      run: go test -v ./tests/...
+
+    - name: Build examples
+      run: |
+        go build -o examples/basic/basic examples/basic/main.go
+        go build -o examples/web-api/web-api examples/web-api/main.go

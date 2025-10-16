@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -118,7 +119,11 @@ func (pm *ProcessManager) StopProcess(uuid string) error {
 
 	if processInfo.Running {
 		if err := pm.killProcess(processInfo.Cmd); err != nil {
-			return fmt.Errorf("failed to stop process: %v", err)
+			// 检查进程是否已经退出
+			if pm.isProcessRunning(processInfo.PID) {
+				return fmt.Errorf("failed to stop process: %v", err)
+			}
+			// 如果进程已经退出，我们认为终止成功
 		}
 	}
 
@@ -137,6 +142,7 @@ func (pm *ProcessManager) StopAll() {
 			defer wg.Done()
 			processInfo.Restart = false
 			if processInfo.Running {
+				// 尝试终止进程，但忽略错误
 				pm.killProcess(processInfo.Cmd)
 			}
 			fmt.Printf("Stopped process: %s (UUID: %s)\n", processInfo.Name, uuid)
@@ -227,6 +233,9 @@ func (pm *ProcessManager) monitorProcess(uuid string, processInfo *types.Process
 	defer pm.wg.Done()
 
 	err := processInfo.Cmd.Wait()
+	if err != nil {
+		fmt.Printf("Process %s (UUID: %s) exited with error: %v\n", processInfo.Name, uuid, err)
+	}
 
 	pm.mu.Lock()
 	processInfo.Running = false
@@ -262,4 +271,12 @@ func (pm *ProcessManager) monitorProcess(uuid string, processInfo *types.Process
 
 	// Process ended and won't restart, remove from manager
 	pm.processes.Delete(uuid)
+}
+
+// killProcess is a platform-agnostic method that delegates to platform-specific implementations
+func (pm *ProcessManager) killProcess(cmd *exec.Cmd) error {
+	if cmd.Process == nil {
+		return nil
+	}
+	return pm.killProcessPlatform(cmd)
 }

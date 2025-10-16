@@ -14,7 +14,7 @@ A cross-platform process manager for Go that allows you to manage, monitor, and 
 ## Installation
 
 ```bash
-go get github.com/yourusername/process-manager
+go get github.com/dreamsxin/process-manager
 ```
 
 ## Examples

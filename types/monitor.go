@@ -17,9 +17,15 @@ type ProcessStats struct {
 
 // MonitorConfig 监控配置
 type MonitorConfig struct {
-	Enabled     bool          `json:"enabled"`
-	Interval    time.Duration `json:"interval"`
-	HistorySize int           `json:"history_size"`
+	Enabled         bool          `json:"enabled"`
+	Interval        time.Duration `json:"interval"`
+	HistorySize     int           `json:"history_size"`
+	RetentionDays   int           `json:"retention_days"`
+	AlertThresholds struct {
+		CPU    float64 `json:"cpu"`
+		Memory float64 `json:"memory"`
+		Disk   float64 `json:"disk"`
+	} `json:"alert_thresholds"`
 }
 
 // ProcessMonitor 进程监控器

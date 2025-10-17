@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Monitor Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .control-group {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        button, select, input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .alerts {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .alert-item {
+            padding: 8px;
+            border-left: 4px solid #dc3545;
+            margin-bottom: 8px;
+            background: #f8f9fa;
+        }
+        .cpu-high { color: #dc3545; }
+        .memory-high { color: #fd7e14; }
+        .disk-high { color: #6f42c1; }
+        .normal { color: #28a745; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>System Monitor Dashboard</h1>
+            <p>Real-time server resource monitoring</p>
+        </div>
+
+        <!-- 实时统计 -->
+        <div class="stats-grid" id="currentStats">
+            <div class="stat-card">
+                <div class="stat-label">CPU Usage</div>
+                <div class="stat-value cpu-high" id="cpuUsage">--%</div>
+                <div>Core Count: <span id="coreCount">--</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Memory Usage</div>
+                <div class="stat-value memory-high" id="memoryUsage">--%</div>
+                <div id="memoryDetails">-- / -- GB</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Disk Usage</div>
+                <div class="stat-value disk-high" id="diskUsage">--%</div>
+                <div id="diskDetails">-- / -- GB</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">System Load</div>
+                <div class="stat-value" id="systemLoad">--</div>
+                <div>1min / 5min / 15min</div>
+            </div>
+        </div>
+
+        <!-- 控制面板 -->
+        <div class="controls">
+            <div class="control-group">
+                <label>Chart Type:</label>
+                <select id="chartType">
+                    <option value="all">All Metrics</option>
+                    <option value="cpu">CPU Only</option>
+                    <option value="memory">Memory Only</option>
+                    <option value="disk">Disk Only</option>
+                    <option value="load">Load Average</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>Data Points:</label>
+                <select id="dataPoints">
+                    <option value="30">30 points</option>
+                    <option value="50" selected>50 points</option>
+                    <option value="100">100 points</option>
+                    <option value="200">200 points</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>Refresh:</label>
+                <select id="refreshInterval">
+                    <option value="5000">5 seconds</option>
+                    <option value="10000" selected>10 seconds</option>
+                    <option value="30000">30 seconds</option>
+                    <option value="60000">1 minute</option>
+                </select>
+            </div>
+            <button onclick="updateCharts()">Refresh Now</button>
+            <button onclick="exportData()">Export Data</button>
+        </div>
+
+        <!-- 图表 -->
+        <div class="chart-container">
+            <canvas id="resourceChart"></canvas>
+        </div>
+
+        <!-- 告警信息 -->
+        <div class="chart-container">
+            <h3>System Alerts</h3>
+            <div class="alerts" id="alertsContainer">
+                <div>No alerts</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let resourceChart = null;
+        let refreshInterval = 10000; // 10 seconds
+        let refreshTimer = null;
+
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', function() {
+            // 设置事件监听器
+            document.getElementById('chartType').addEventListener('change', updateCharts);
+            document.getElementById('dataPoints').addEventListener('change', updateCharts);
+            document.getElementById('refreshInterval').addEventListener('change', function() {
+                refreshInterval = parseInt(this.value);
+                setupAutoRefresh();
+            });
+
+            // 初始化图表和自动刷新
+            updateCurrentStats();
+            updateCharts();
+            updateAlerts();
+            setupAutoRefresh();
+        });
+
+        // 设置自动刷新
+        function setupAutoRefresh() {
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+            }
+            refreshTimer = setInterval(() => {
+                updateCurrentStats();
+                updateCharts();
+                updateAlerts();
+            }, refreshInterval);
+        }
+
+        // 更新当前统计
+        async function updateCurrentStats() {
+            try {
+                const response = await fetch('/api/stats/current');
+                const stats = await response.json();
+                
+                // 更新CPU
+                document.getElementById('cpuUsage').textContent = stats.cpu_percent.toFixed(1) + '%';
+                document.getElementById('cpuUsage').className = `stat-value ${stats.cpu_percent > 80 ? 'cpu-high' : 'normal'}`;
+                
+                // 更新内存
+                document.getElementById('memoryUsage').textContent = stats.memory_percent.toFixed(1) + '%';
+                document.getElementById('memoryUsage').className = `stat-value ${stats.memory_percent > 85 ? 'memory-high' : 'normal'}`;
+                document.getElementById('memoryDetails').textContent = 
+                    formatBytes(stats.memory_used) + ' / ' + formatBytes(stats.memory_total);
+                
+                // 更新磁盘
+                document.getElementById('diskUsage').textContent = stats.disk_percent ? stats.disk_percent.toFixed(1) + '%' : 'N/A';
+                document.getElementById('diskUsage').className = `stat-value ${stats.disk_percent > 90 ? 'disk-high' : 'normal'}`;
+                document.getElementById('diskDetails').textContent = stats.disk_used ? 
+                    formatBytes(stats.disk_used) + ' / ' + formatBytes(stats.disk_total) : 'N/A';
+                
+                // 更新负载
+                if (stats.load_1) {
+                    document.getElementById('systemLoad').textContent = 
+                        `${stats.load_1.toFixed(2)} / ${stats.load_5.toFixed(2)} / ${stats.load_15.toFixed(2)}`;
+                }
+                
+            } catch (error) {
+                console.error('Error fetching current stats:', error);
+            }
+        }
+
+        // 更新图表
+        async function updateCharts() {
+            const chartType = document.getElementById('chartType').value;
+            const dataPoints = document.getElementById('dataPoints').value;
+            
+            try {
+                const response = await fetch(`/api/stats/chart?metric=${chartType}&count=${dataPoints}`);
+                const chartData = await response.json();
+                
+                renderChart(chartData, chartType);
+            } catch (error) {
+                console.error('Error fetching chart data:', error);
+            }
+        }
+
+        // 渲染图表
+        function renderChart(chartData, chartType) {
+            const ctx = document.getElementById('resourceChart').getContext('2d');
+            
+            // 销毁现有图表
+            if (resourceChart) {
+                resourceChart.destroy();
+            }
+            
+            // 创建新图表
+            resourceChart = new Chart(ctx, {
+                type: 'line',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: chartType === 'load' ? undefined : 100,
+                            title: {
+                                display: true,
+                                text: chartType === 'load' ? 'Load Average' : 'Usage (%)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: getChartTitle(chartType)
+                        },
+                        legend: {
+                            position: 'top',
+                        }
+                    }
+                }
+            });
+        }
+
+        // 获取图表标题
+        function getChartTitle(chartType) {
+            const titles = {
+                'all': 'System Resource Usage',
+                'cpu': 'CPU Usage Over Time',
+                'memory': 'Memory Usage Over Time',
+                'disk': 'Disk Usage Over Time',
+                'load': 'System Load Average'
+            };
+            return titles[chartType] || 'System Metrics';
+        }
+
+        // 更新告警
+        async function updateAlerts() {
+            try {
+                const response = await fetch('/api/alerts');
+                const alerts = await response.json();
+                
+                const container = document.getElementById('alertsContainer');
+                if (alerts.length === 0) {
+                    container.innerHTML = '<div>No alerts</div>';
+                } else {
+                    container.innerHTML = alerts.map(alert => 
+                        `<div class="alert-item">${alert}</div>`
+                    ).join('');
+                }
+            } catch (error) {
+                console.error('Error fetching alerts:', error);
+            }
+        }
+
+        // 导出数据
+        async function exportData() {
+            try {
+                const response = await fetch('/api/stats/history?count=1000');
+                const data = await response.json();
+                
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `system-stats-${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                console.error('Error exporting data:', error);
+            }
+        }
+
+        // 格式化字节大小
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+    </script>
+</body>
+</html>

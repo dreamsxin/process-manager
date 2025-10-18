@@ -235,6 +235,8 @@ func (pm *ProcessManager) monitorProcess(uuid string, processInfo *types.Process
 	err := processInfo.Cmd.Wait()
 	if err != nil {
 		fmt.Printf("Process %s (UUID: %s) exited with error: %v\n", processInfo.Name, uuid, err)
+	} else {
+		fmt.Printf("Process %s (UUID: %s) exited successfully\n", processInfo.Name, uuid)
 	}
 
 	pm.mu.Lock()
